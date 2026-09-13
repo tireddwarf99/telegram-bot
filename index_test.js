@@ -1,5 +1,5 @@
 const http = require('http');
-const bot = require('./config/bot');
+const bot = require('./config/bot_test'); // <-- тестовый бот
 const { handleInstagram } = require('./controllers/instagramController');
 const { handleTikTok } = require('./controllers/tiktokController');
 const { handleTrap } = require('./controllers/trapController');
@@ -7,7 +7,7 @@ const { handleYoutubeShorts } = require('./controllers/youtubeController');
 
 // HTTP-сервер — нужен Render Web Service чтобы не засыпать
 // cron-job.org пингует /health каждые 10 минут
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3001;
 http.createServer((req, res) => {
   if (req.url === '/health') {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
@@ -17,7 +17,7 @@ http.createServer((req, res) => {
     res.end('Not found');
   }
 }).listen(PORT, () => {
-  console.log(`Health server listening on port ${PORT}`);
+  console.log(`[TEST] Health server listening on port ${PORT}`);
 });
 
 // Обработка команд и сообщений
