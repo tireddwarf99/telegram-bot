@@ -118,6 +118,9 @@ Temporary files are deleted after upload or failure. The upload limit is
 50 MB; larger videos receive a size-limit message. The fxTikTok fallback
 already uploads its downloaded MP4 directly.
 
+If TikWM's version of a TikTok video exceeds 50 MB, the bot also tries fxTikTok
+for an alternative version of the same post before reporting the size limit.
+
 When a video exceeds 20 MB, the bot posts a short message asking you to wait.
 During file downloads and uploads, it refreshes Telegram's "sending video"
 status every four seconds, stopping the refresh when the operation completes

@@ -41,16 +41,19 @@ async function withUploadStatus(bot, chatId, upload) {
   }
 }
 
-function tooLargeError() {
+function tooLargeError(bytes, source) {
   const error = new Error('Video exceeds the Telegram upload limit');
   error.code = 'VIDEO_TOO_LARGE';
+  error.videoBytes = bytes;
+  error.limitBytes = MAX_VIDEO_BYTES;
+  error.sizeSource = source;
   return error;
 }
 
 async function sendVideo(bot, chatId, media, filename = 'video.mp4') {
   const fileOptions = { filename, contentType: 'video/mp4' };
   if (Buffer.isBuffer(media)) {
-    if (media.length > MAX_VIDEO_BYTES) throw tooLargeError();
+    if (media.length > MAX_VIDEO_BYTES) throw tooLargeError(media.length, 'buffer');
     if (media.length > URL_VIDEO_BYTES) await notifyLargeVideo(bot, chatId);
     return withUploadStatus(bot, chatId, () => uploadVideoFile(bot, chatId, media, fileOptions));
   }
@@ -102,13 +105,15 @@ async function downloadAndUpload(bot, chatId, media, fileOptions, notifyIfLarge)
       timeout: 60000,
       maxRedirects: 5,
     });
-    if (Number(response.headers['content-length']) > MAX_VIDEO_BYTES) throw tooLargeError();
+    if (Number(response.headers['content-length']) > MAX_VIDEO_BYTES) {
+      throw tooLargeError(Number(response.headers['content-length']), 'content_length');
+    }
     if (Number(response.headers['content-length']) > URL_VIDEO_BYTES) await notifyIfLarge();
     let bytes = 0;
     const sizeLimit = new Transform({
       transform(chunk, encoding, callback) {
         bytes += chunk.length;
-        callback(bytes > MAX_VIDEO_BYTES ? tooLargeError() : null, chunk);
+        callback(bytes > MAX_VIDEO_BYTES ? tooLargeError(bytes, 'downloaded_bytes') : null, chunk);
       },
     });
     await pipeline(response.data, sizeLimit, fs.createWriteStream(videoPath));

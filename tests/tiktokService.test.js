@@ -1,6 +1,7 @@
 const { test, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const axios = require('axios');
+const { Readable } = require('node:stream');
 const { getTikTokMedia } = require('../services/tiktokService');
 const { handleTikTok } = require('../controllers/tiktokController');
 
@@ -126,4 +127,75 @@ test('fallback failure preserves the original message', async () => {
   };
   await handleTikTok(bot, { text: 'https://www.tt.site/t/ZSbnkuwFc/', chat: { id: 42 }, message_id: 7 });
   assert.deepEqual(events, ['error']);
+});
+
+test('tries the 37.69 MB fxTikTok version when the TikWM file is larger than 50 MB', async () => {
+  const primary = 'https://example.com/oversized.mp4';
+  const alternative = Buffer.alloc(39518066);
+  mp4.copy(alternative);
+  const requests = [];
+  axios.get = async (url) => {
+    requests.push(url);
+    if (url === 'https://www.tikwm.com/api/') return { data: { data: { play: primary } } };
+    if (url === primary) return { headers: { 'content-length': String(60 * 1024 * 1024) }, data: Readable.from([]) };
+    if (url.startsWith('https://tnktok.com/')) return { data: `<meta property="og:video" content="${downloadUrl}">` };
+    if (url === downloadUrl) return { data: alternative };
+    assert.fail(`Unexpected request: ${url}`);
+  };
+  const messages = [];
+  let uploads = 0;
+  let deleted = false;
+  const bot = {
+    sendVideo: async (id, media) => {
+      if (typeof media === 'string' && media === primary) {
+        const error = new Error('URL fetch failed');
+        error.code = 'ETELEGRAM';
+        error.response = { body: { error_code: 400, description: 'Bad Request: failed to get HTTP URL content' } };
+        throw error;
+      }
+      assert.ok(Buffer.isBuffer(media));
+      assert.equal(media.length, 39518066);
+      uploads += 1;
+    },
+    sendMessage: async (id, text) => messages.push(text),
+    sendChatAction: async () => {},
+    deleteMessage: async () => { deleted = true; },
+  };
+  await handleTikTok(bot, { text: videoUrl, chat: { id: 42 }, message_id: 7 });
+  assert.equal(uploads, 1);
+  assert.equal(deleted, true);
+  assert.equal(requests.filter(url => url === 'https://www.tikwm.com/api/').length, 1);
+  assert.equal(messages.some(text => /50 МБ/.test(text)), false);
+});
+
+test('reports the size limit only after the alternative source also exceeds it', async () => {
+  const primary = 'https://example.com/oversized.mp4';
+  let fallbackAttempts = 0;
+  axios.get = async (url) => {
+    if (url === 'https://www.tikwm.com/api/') return { data: { data: { play: primary } } };
+    if (url === primary) return { headers: { 'content-length': String(60 * 1024 * 1024) }, data: Readable.from([]) };
+    if (url.startsWith('https://tnktok.com/')) {
+      fallbackAttempts += 1;
+      return { data: `<meta property="og:video" content="${downloadUrl}">` };
+    }
+    const error = new Error('maxContentLength size exceeded');
+    error.code = 'ERR_BAD_RESPONSE';
+    throw error;
+  };
+  const messages = [];
+  const bot = {
+    sendVideo: async () => {
+      const error = new Error('URL fetch failed');
+      error.code = 'ETELEGRAM';
+      error.response = { body: { error_code: 400, description: 'Bad Request: failed to get HTTP URL content' } };
+      throw error;
+    },
+    sendChatAction: async () => {},
+    sendMessage: async (id, text) => messages.push(text),
+    deleteMessage: async () => assert.fail('must preserve the original link'),
+  };
+  await handleTikTok(bot, { text: videoUrl, chat: { id: 42 }, message_id: 7 });
+  assert.equal(fallbackAttempts, 1);
+  assert.equal(messages.length, 1);
+  assert.match(messages[0], /50 МБ/);
 });

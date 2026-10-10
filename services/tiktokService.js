@@ -60,6 +60,10 @@ async function getTikTokMedia(videoUrl) {
     });
   }
 
+  return getFxTikTokMedia(videoUrl);
+}
+
+async function getFxTikTokMedia(videoUrl) {
   const url = new URL(videoUrl);
   if (!(url.hostname === 'tiktok.com' || url.hostname.endsWith('.tiktok.com')) ||
       !/^\/@[^/]+\/(video|photo)\/\d+\/?$/.test(url.pathname)) {
@@ -85,4 +89,4 @@ async function getTikTokMedia(videoUrl) {
   return { play: video };
 }
 
-module.exports = { getTikTokMedia };
+module.exports = { getTikTokMedia, getFxTikTokMedia };

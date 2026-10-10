@@ -1,6 +1,6 @@
 const delay = require('../utils/delay');
 const { extractTikTokUrl, resolveTikTokUrl } = require('../utils/tiktokUrl');
-const { getTikTokMedia } = require('../services/tiktokService');
+const { getTikTokMedia, getFxTikTokMedia } = require('../services/tiktokService');
 const { sendVideo, VIDEO_TOO_LARGE_MESSAGE } = require('../utils/sendVideo');
 const { sendPhotoAlbum, deleteOriginalMessage } = require('../utils/media');
 
@@ -19,7 +19,19 @@ const handleTikTok = async (bot, msg) => {
       await sendPhotoAlbum(bot, chatId, media.images);
     } else if (media.play) {
       await delay(700);
-      await sendVideo(bot, chatId, media.play, 'tiktok.mp4');
+      try {
+        await sendVideo(bot, chatId, media.play, 'tiktok.mp4');
+      } catch (error) {
+        // Different sources can provide different encodings of the same post.
+        if (error.code !== 'VIDEO_TOO_LARGE' || Buffer.isBuffer(media.play)) throw error;
+        console.warn('[TikTok] TikWM video exceeds upload limit; trying fxTikTok', {
+          bytes: error.videoBytes, limitBytes: error.limitBytes, sizeSource: error.sizeSource,
+        });
+        stage = 'get_fallback_media';
+        const fallback = await getFxTikTokMedia(videoUrl);
+        stage = 'send_fallback_media';
+        await sendVideo(bot, chatId, fallback.play, 'tiktok.mp4');
+      }
     } else {
       await bot.sendMessage(chatId, 'НОУ ВИДЕОС ДЛЯ ТЕБЯ');
     }
@@ -31,6 +43,9 @@ const handleTikTok = async (bot, msg) => {
       stage: err.stage || stage,
       status: err.response?.status ?? err.response?.statusCode ?? err.response?.body?.error_code,
       code: err.code,
+      bytes: err.videoBytes,
+      limitBytes: err.limitBytes,
+      sizeSource: err.sizeSource,
       description: typeof description === 'string' ? description.replace(/https?:\/\/\S+/gi, '[URL]').slice(0, 250) : undefined,
     });
     await bot.sendMessage(chatId, err.code === 'VIDEO_TOO_LARGE' ? VIDEO_TOO_LARGE_MESSAGE :
