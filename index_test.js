@@ -2,6 +2,7 @@ const http = require('http');
 const bot = require('./config/bot_test'); // <-- тестовый бот
 const { handleInstagram } = require('./controllers/instagramController');
 const { handleTikTok } = require('./controllers/tiktokController');
+const { extractTikTokUrl } = require('./utils/tiktokUrl');
 const { handleTrap } = require('./controllers/trapController');
 const { handleYoutubeShorts } = require('./controllers/youtubeController');
 
@@ -31,7 +32,7 @@ bot.on('message', async (msg) => {
       await handleInstagram(bot, msg);
     }
     // TikTok обработка
-    else if (text && text.includes('tiktok.com')) {
+    else if (text && extractTikTokUrl(text)) {
       await handleTikTok(bot, msg);
     }
     // YouTube Shorts обработка
