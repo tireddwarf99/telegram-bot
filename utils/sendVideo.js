@@ -12,7 +12,7 @@ const VIDEO_TOO_LARGE_MESSAGE = 'ДАУН ТЫ ЧТО ПОРНО КАЧАТЬ С
 
 async function notifyLargeVideo(bot, chatId) {
   try {
-    await bot.sendMessage(chatId, LARGE_VIDEO_MESSAGE);
+    return await bot.sendMessage(chatId, LARGE_VIDEO_MESSAGE);
   } catch {
     // A failed progress notification must not prevent the video upload.
   }
@@ -51,10 +51,32 @@ function tooLargeError(bytes, source) {
 }
 
 async function sendVideo(bot, chatId, media, filename = 'video.mp4') {
+  let notification;
+  let notified = false;
+  const notifyIfLarge = async () => {
+    if (notified) return;
+    notified = true;
+    notification = await notifyLargeVideo(bot, chatId);
+  };
+  try {
+    return await sendVideoWithNotice(bot, chatId, media, filename, notifyIfLarge);
+  } finally {
+    if (notification?.message_id !== undefined) {
+      try {
+        await bot.deleteMessage(chatId, notification.message_id);
+      } catch (error) {
+        // The video result must not be changed by notification cleanup failure.
+        console.warn('[Video] Could not delete wait notification', { code: error.code });
+      }
+    }
+  }
+}
+
+async function sendVideoWithNotice(bot, chatId, media, filename, notifyIfLarge) {
   const fileOptions = { filename, contentType: 'video/mp4' };
   if (Buffer.isBuffer(media)) {
     if (media.length > MAX_VIDEO_BYTES) throw tooLargeError(media.length, 'buffer');
-    if (media.length > URL_VIDEO_BYTES) await notifyLargeVideo(bot, chatId);
+    if (media.length > URL_VIDEO_BYTES) await notifyIfLarge();
     return withUploadStatus(bot, chatId, () => uploadVideoFile(bot, chatId, media, fileOptions));
   }
 
@@ -74,12 +96,6 @@ async function sendVideo(bot, chatId, media, filename = 'video.mp4') {
     console.warn('[Video] Telegram could not fetch URL; trying file upload', { reason: sizeError ? 'size_limit' : 'url_fetch' });
   }
 
-  let notified = false;
-  const notifyIfLarge = async () => {
-    if (notified) return;
-    notified = true;
-    await notifyLargeVideo(bot, chatId);
-  };
   if (sizeError) await notifyIfLarge();
   return withUploadStatus(bot, chatId, () => downloadAndUpload(bot, chatId, media, fileOptions, notifyIfLarge));
 }

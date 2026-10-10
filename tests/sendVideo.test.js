@@ -231,3 +231,47 @@ test('notification and status failures do not prevent uploading the video', asyn
   await sendVideo(bot, 42, Buffer.alloc(20 * 1024 * 1024 + 1));
   assert.equal(sent, true);
 });
+
+test('removes the wait notification after a successful file upload', async () => {
+  axios.get = async () => responseOfSize(21 * 1024 * 1024);
+  const events = [];
+  const bot = uploadBot(async () => { events.push('uploaded'); return { message_id: 8 }; });
+  bot.sendMessage = async (chatId, text) => {
+    assert.equal(text, LARGE_VIDEO_MESSAGE);
+    events.push('notified');
+    return { message_id: 7 };
+  };
+  bot.deleteMessage = async (chatId, messageId) => {
+    assert.equal(chatId, 42);
+    assert.equal(messageId, 7);
+    events.push('deleted');
+  };
+  assert.deepEqual(await sendVideo(bot, 42, 'https://example.com/video.mp4'), { message_id: 8 });
+  assert.deepEqual(events, ['notified', 'uploaded', 'deleted']);
+});
+
+test('removes the wait notification for fallback buffers and failed uploads', async () => {
+  for (const fail of [false, true]) {
+    const events = [];
+    const bot = {
+      sendMessage: async () => { events.push('notified'); return { message_id: 7 }; },
+      sendChatAction: async () => {},
+      sendVideo: async () => { events.push('uploaded'); if (fail) throw new Error('Upload failed'); },
+      deleteMessage: async (id, message) => { assert.equal(message, 7); events.push('deleted'); },
+    };
+    const operation = sendVideo(bot, 42, Buffer.alloc(20 * 1024 * 1024 + 1));
+    if (fail) await assert.rejects(operation, /Upload failed/);
+    else await operation;
+    assert.deepEqual(events, ['notified', 'uploaded', 'deleted']);
+  }
+});
+
+test('notification deletion errors do not report a successful upload as failed', async () => {
+  const bot = {
+    sendMessage: async () => ({ message_id: 7 }),
+    sendChatAction: async () => {},
+    sendVideo: async () => ({ message_id: 8 }),
+    deleteMessage: async () => { throw new Error('Delete failed'); },
+  };
+  assert.deepEqual(await sendVideo(bot, 42, Buffer.alloc(20 * 1024 * 1024 + 1)), { message_id: 8 });
+});
