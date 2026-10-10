@@ -37,7 +37,7 @@ function responseOfSize(bytes, headers = {}) {
   };
 }
 
-function uploadBot(onUpload = async () => {}) {
+function uploadBot(onUpload = async () => {}, description = 'Bad Request: file is too big') {
   const events = [];
   return { events,
     sendMessage: async (...args) => events.push(['message', ...args]),
@@ -46,7 +46,7 @@ function uploadBot(onUpload = async () => {}) {
     if (typeof args[1] === 'string' && args[1].startsWith('https://')) {
       const error = new Error('ETELEGRAM: 400 Bad Request: file is too big');
       error.code = 'ETELEGRAM';
-      error.response = { body: { error_code: 400, description: 'Bad Request: file is too big' } };
+      error.response = { body: { error_code: 400, description } };
       throw error;
     }
     return onUpload(...args);
@@ -108,6 +108,33 @@ test('accepts a file exactly at the 50 MB upload boundary', async () => {
     assert.equal(fs.statSync(file).size, MAX_VIDEO_BYTES);
   });
   await sendVideo(bot, 42, 'https://example.com/video.mp4');
+});
+
+test('uploads the 37.69 MB video when Telegram reports a generic URL fetch error', async () => {
+  const bytes = 39518066;
+  axios.get = async () => responseOfSize(bytes, { 'content-length': String(bytes) });
+  for (const description of [
+    'Bad Request: failed to get HTTP URL content',
+    'Bad Request: wrong file identifier/HTTP URL specified',
+    'Bad Request: wrong type of the web page content',
+  ]) {
+    let uploads = 0;
+    const bot = uploadBot(async (chat, file) => {
+      assert.equal(fs.statSync(file).size, bytes);
+      uploads += 1;
+    }, description);
+    await sendVideo(bot, 42, 'https://example.com/video.mp4');
+    assert.equal(uploads, 1);
+    assert.equal(bot.events.filter(event => event[0] === 'message').length, 1);
+    assert.equal(bot.events.find(event => event[0] === 'message')[2], LARGE_VIDEO_MESSAGE);
+  }
+});
+
+test('URL fetch errors for small videos do not produce a false 20 MB wait message', async () => {
+  axios.get = async () => responseOfSize(100);
+  const bot = uploadBot(async () => {}, 'Bad Request: failed to get HTTP URL content');
+  await sendVideo(bot, 42, 'https://example.com/small.mp4');
+  assert.equal(bot.events.filter(event => event[0] === 'message').length, 0);
 });
 
 test('rejects oversized downloads without trusting Content-Length', async () => {

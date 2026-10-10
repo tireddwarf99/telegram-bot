@@ -52,24 +52,46 @@ async function sendVideo(bot, chatId, media, filename = 'video.mp4') {
   if (Buffer.isBuffer(media)) {
     if (media.length > MAX_VIDEO_BYTES) throw tooLargeError();
     if (media.length > URL_VIDEO_BYTES) await notifyLargeVideo(bot, chatId);
-    return withUploadStatus(bot, chatId, () => bot.sendVideo(chatId, media, {}, fileOptions));
+    return withUploadStatus(bot, chatId, () => uploadVideoFile(bot, chatId, media, fileOptions));
   }
 
+  let sizeError;
   try {
     return await bot.sendVideo(chatId, media);
   } catch (error) {
     const status = error.response?.body?.error_code ?? error.response?.statusCode;
     const description = error.response?.body?.description || error.message || '';
-    const sizeError = /file (?:is )?too (?:big|large)|request entity too large/i.test(description);
-    if (error.code !== 'ETELEGRAM' || ![400, 413].includes(status) || !sizeError) throw error;
+    sizeError = /file (?:is )?too (?:big|large)|request entity too large/i.test(description);
+    const urlError = /failed to get HTTP URL content|wrong file identifier\/HTTP URL specified|wrong type of the web page content/i.test(description);
+    const isUrl = typeof media === 'string' && /^https?:\/\//i.test(media);
+    if (error.code !== 'ETELEGRAM' || ![400, 413].includes(status) || !isUrl || (!sizeError && !urlError)) {
+      error.stage = 'telegram_url';
+      throw error;
+    }
+    console.warn('[Video] Telegram could not fetch URL; trying file upload', { reason: sizeError ? 'size_limit' : 'url_fetch' });
   }
 
-  await notifyLargeVideo(bot, chatId);
-  return withUploadStatus(bot, chatId, () => downloadAndUpload(bot, chatId, media, fileOptions));
+  let notified = false;
+  const notifyIfLarge = async () => {
+    if (notified) return;
+    notified = true;
+    await notifyLargeVideo(bot, chatId);
+  };
+  if (sizeError) await notifyIfLarge();
+  return withUploadStatus(bot, chatId, () => downloadAndUpload(bot, chatId, media, fileOptions, notifyIfLarge));
 }
 
-async function downloadAndUpload(bot, chatId, media, fileOptions) {
-  // Only upload locally after Telegram rejects the URL because of file size.
+async function uploadVideoFile(bot, chatId, media, fileOptions) {
+  try {
+    return await bot.sendVideo(chatId, media, {}, fileOptions);
+  } catch (error) {
+    error.stage = 'telegram_upload';
+    throw error;
+  }
+}
+
+async function downloadAndUpload(bot, chatId, media, fileOptions, notifyIfLarge) {
+  // Download after Telegram rejects the URL because of size or URL accessibility.
   // Stream to disk so concurrent downloads do not each use 50 MB of RAM.
   const directory = await fs.promises.mkdtemp(path.join(os.tmpdir(), 'telegram-video-'));
   const videoPath = path.join(directory, 'video.mp4');
@@ -81,6 +103,7 @@ async function downloadAndUpload(bot, chatId, media, fileOptions) {
       maxRedirects: 5,
     });
     if (Number(response.headers['content-length']) > MAX_VIDEO_BYTES) throw tooLargeError();
+    if (Number(response.headers['content-length']) > URL_VIDEO_BYTES) await notifyIfLarge();
     let bytes = 0;
     const sizeLimit = new Transform({
       transform(chunk, encoding, callback) {
@@ -89,7 +112,12 @@ async function downloadAndUpload(bot, chatId, media, fileOptions) {
       },
     });
     await pipeline(response.data, sizeLimit, fs.createWriteStream(videoPath));
-    return await bot.sendVideo(chatId, videoPath, {}, fileOptions);
+    if (bytes > URL_VIDEO_BYTES) await notifyIfLarge();
+    console.info('[Video] Uploading downloaded file', { bytes });
+    return await uploadVideoFile(bot, chatId, videoPath, fileOptions);
+  } catch (error) {
+    error.stage ||= 'video_download';
+    throw error;
   } finally {
     response?.data.destroy();
     await fs.promises.rm(videoPath, { force: true });

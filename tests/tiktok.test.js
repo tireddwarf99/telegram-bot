@@ -113,4 +113,20 @@ test('resolution failure preserves the message and does not call TikWM', async (
   assert.equal(bot.events[0][0], 'message');
   assert.equal(bot.events[0][1], 42);
   assert.equal(typeof bot.events[0][2], 'string');
+  assert.doesNotMatch(bot.events[0][2], /50 МБ/);
+});
+
+test('Telegram errors unrelated to size do not claim that the video exceeds 50 MB', async () => {
+  axios.get = async () => ({ data: { data: { play: 'https://example.com/video.mp4' } } });
+  const bot = makeBot();
+  bot.sendVideo = async () => {
+    const error = new Error('Telegram failed');
+    error.code = 'ETELEGRAM';
+    error.response = { body: { error_code: 400, description: 'Bad Request: chat not found' } };
+    throw error;
+  };
+  await handleTikTok(bot, { text: videoUrl, chat: { id: 42 }, message_id: 7 });
+  assert.equal(bot.events.length, 1);
+  assert.equal(bot.events[0][0], 'message');
+  assert.doesNotMatch(bot.events[0][2], /50 МБ/);
 });

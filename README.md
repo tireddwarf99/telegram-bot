@@ -112,7 +112,8 @@ restricted posts.
 
 Videos from TikWM, Instagram, and YouTube are first sent by URL, without a
 local download. If Telegram rejects the URL because the video exceeds its
-20 MB URL-fetch limit, the bot downloads it to a temporary file and uploads it.
+20 MB URL-fetch limit or Telegram cannot fetch it, the bot downloads it to a
+temporary file and uploads it. The wait message is shown only for videos over 20 MB.
 Temporary files are deleted after upload or failure. The upload limit is
 50 MB; larger videos receive a size-limit message. The fxTikTok fallback
 already uploads its downloaded MP4 directly.
