@@ -1,7 +1,6 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
-
-const MAX_VIDEO_BYTES = 50 * 1024 * 1024;
+const { MAX_VIDEO_BYTES } = require('../utils/sendVideo');
 
 function isMediaUrl(url) {
   const domains = ['tiktokcdn-us.com', 'tiktokcdn.com', 'tiktokv.com'];
@@ -14,13 +13,21 @@ async function downloadFallbackVideo(initialUrl) {
   let url = initialUrl;
   for (let redirects = 0; redirects <= 4; redirects += 1) {
     if (!isMediaUrl(url)) throw new Error('Unexpected fxTikTok video host');
-    const response = await axios.get(url.href, {
-      responseType: 'arraybuffer',
-      timeout: 45000,
-      maxContentLength: MAX_VIDEO_BYTES,
-      maxRedirects: 0,
-      validateStatus: (status) => status >= 200 && status < 400,
-    });
+    let response;
+    try {
+      response = await axios.get(url.href, {
+        responseType: 'arraybuffer',
+        timeout: 45000,
+        maxContentLength: MAX_VIDEO_BYTES,
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400,
+      });
+    } catch (error) {
+      if (error.code === 'ERR_BAD_RESPONSE' && /maxContentLength/i.test(error.message)) {
+        error.code = 'VIDEO_TOO_LARGE';
+      }
+      throw error;
+    }
     if (response.status >= 300) {
       if (!response.headers.location) throw new Error('Missing video redirect');
       url = new URL(response.headers.location, url);

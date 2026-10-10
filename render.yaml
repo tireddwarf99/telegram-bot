@@ -15,5 +15,3 @@ services:
         sync: false
       - key: RAPID_API_HOST_YOUTUBE
         sync: false
-      - key: TELEGRAM_ID_ADM
-        sync: false

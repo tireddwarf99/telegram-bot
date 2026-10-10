@@ -16,7 +16,7 @@ currently in Russian, and some contain profanity.
 
 - **JavaScript and Node.js** — application runtime.
 - **node-telegram-bot-api** — Telegram integration using long polling.
-- **Axios and request** — requests to media services.
+- **Axios** — requests to media services.
 - **Cheerio** — extracts video links from HTML for the TikTok fallback.
 - **dotenv** — loads local environment variables from `.env`.
 - **Node.js HTTP server** — provides the `/health` endpoint.
@@ -70,7 +70,6 @@ dependencies are installed by `npm ci`, using the versions in `package-lock.json
 | `RAPID_API_HOST_YOUTUBE` | YouTube | `yt-api.p.rapidapi.com` |
 | `TELEGRAM_API_TEST` | Optional live test bot | A separate Telegram bot token. |
 | `PORT` | Optional HTTP setting | Health server port; defaults to `3000` for the main bot and `3001` for the test bot. |
-| `TELEGRAM_ID_ADM` | Legacy admin helpers only | Your numeric Telegram user ID. Not required by the default `npm start` entry point. |
 
 Example `.env`:
 
@@ -91,8 +90,6 @@ TELEGRAM_API_TEST=your_test_telegram_bot_token
 # Optional: HTTP health server port.
 PORT=3000
 
-# Optional: used by legacy admin helpers, not the default entry point.
-TELEGRAM_ID_ADM=your_telegram_user_id
 ```
 
 You can use the same RapidAPI key for both services if that key has access
@@ -110,6 +107,20 @@ and uploads it to Telegram.
 Downloads depend on the external services being available and the media
 being accessible. The fallback does not guarantee access to private or
 restricted posts.
+
+## Video uploads
+
+Videos from TikWM, Instagram, and YouTube are first sent by URL, without a
+local download. If Telegram rejects the URL because the video exceeds its
+20 MB URL-fetch limit, the bot downloads it to a temporary file and uploads it.
+Temporary files are deleted after upload or failure. The upload limit is
+50 MB; larger videos receive a size-limit message. The fxTikTok fallback
+already uploads its downloaded MP4 directly.
+
+When a video exceeds 20 MB, the bot posts a short message asking you to wait.
+During file downloads and uploads, it refreshes Telegram's "sending video"
+status every four seconds, stopping the refresh when the operation completes
+or fails.
 
 ## Hosting and tests
 

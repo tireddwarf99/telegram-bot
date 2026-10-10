@@ -8,16 +8,12 @@
     "test:unit": "node --test tests/*.test.js"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=18.17.0"
   },
   "dependencies": {
     "axios": "^1.7.9",
     "cheerio": "^1.0.0",
-    "commander": "^13.0.0",
     "dotenv": "^16.4.7",
-    "fs": "^0.0.1-security",
-    "node-telegram-bot-api": "^0.66.0",
-    "path": "^0.12.7",
-    "request": "^2.88.2"
+    "node-telegram-bot-api": "^0.66.0"
   }
 }

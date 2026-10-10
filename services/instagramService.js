@@ -1,17 +1,14 @@
 const axios = require('axios');
-require('dotenv').config();
-
-const APIKey = process.env.RAPID_API_KEY;
-const APIHost = process.env.RAPID_API_HOST;
 
 const instaScrapper = async (url) => {
   const options = {
     method: 'GET',
     url: 'https://instagram-looter2.p.rapidapi.com/post-dl',
     params: { link: url },
+    timeout: 20000,
     headers: {
-      'X-RapidAPI-Key': APIKey,
-      'X-RapidAPI-Host': APIHost
+      'X-RapidAPI-Key': process.env.RAPID_API_KEY,
+      'X-RapidAPI-Host': process.env.RAPID_API_HOST
     }
   };
 
@@ -19,7 +16,7 @@ const instaScrapper = async (url) => {
     const response = await axios.request(options);
     return response.data.data.medias;
   } catch (error) {
-    console.error('Ошибканчик, разраб апи насрал в штаны!:', error);
+    console.error('Ошибканчик, разраб апи насрал в штаны!:', { code: error.code, status: error.response?.status });
     throw error;
   }
 };

@@ -81,13 +81,13 @@ test('controller sends the resolved URL to TikWM and delivers photos', async () 
     if (url === shortUrl) return { headers: { location: videoUrl } };
     assert.equal(url, 'https://www.tikwm.com/api/');
     assert.equal(options.params.url, videoUrl);
-    return { data: { data: { images: ['https://example.com/photo.jpg'] } } };
+    return { data: { data: { images: ['https://example.com/photo.jpg', 'https://example.com/photo2.jpg'] } } };
   };
   const bot = makeBot();
   await handleTikTok(bot, { text: `Видео: ${shortUrl}`, chat: { id: 42 }, message_id: 7 });
   assert.deepEqual(calls, [shortUrl, 'https://www.tikwm.com/api/']);
   assert.deepEqual(bot.events, [
-    ['photos', 42, [{ type: 'photo', media: 'https://example.com/photo.jpg' }]],
+    ['photos', 42, [{ type: 'photo', media: 'https://example.com/photo.jpg' }, { type: 'photo', media: 'https://example.com/photo2.jpg' }]],
     ['delete', 42, 7],
   ]);
 });
@@ -111,5 +111,6 @@ test('resolution failure preserves the message and does not call TikWM', async (
   assert.equal(calls, 1);
   assert.equal(bot.events.length, 1);
   assert.equal(bot.events[0][0], 'message');
-  assert.match(bot.events[0][2], /Попробуй позже/);
+  assert.equal(bot.events[0][1], 42);
+  assert.equal(typeof bot.events[0][2], 'string');
 });

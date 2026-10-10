@@ -1,9 +1,7 @@
 const axios = require('axios');
 const delay = require('../utils/delay');
-require('dotenv').config();
-
-const APIKey = process.env.RAPID_API_KEY_YOUTUBE;
-const APIHost = process.env.RAPID_API_HOST_YOUTUBE;
+const { sendVideo, VIDEO_TOO_LARGE_MESSAGE } = require('../utils/sendVideo');
+const { deleteOriginalMessage } = require('../utils/media');
 
 const handleYoutubeShorts = async (bot, msg) => {
   const text = msg.text;
@@ -13,8 +11,8 @@ const handleYoutubeShorts = async (bot, msg) => {
     const response = await axios.get('https://yt-api.p.rapidapi.com/dl', {
       params: { id: extractYoutubeId(text) },
       headers: {
-        'X-RapidAPI-Key': APIKey,
-        'X-RapidAPI-Host': APIHost,
+        'X-RapidAPI-Key': process.env.RAPID_API_KEY_YOUTUBE,
+        'X-RapidAPI-Host': process.env.RAPID_API_HOST_YOUTUBE,
       },
       timeout: 20000,
     });
@@ -27,30 +25,7 @@ const handleYoutubeShorts = async (bot, msg) => {
       return;
     }
 
-    // Берём наилучший формат: ищем видео с аудио (adaptiveFormats с типом video/mp4)
-    // или обычные форматы (formats)
-    let videoUrl = null;
-
-    // Сначала ищем в formats — они уже с аудиом
-    if (data.formats && data.formats.length > 0) {
-      // Берём 720p или наименьшее из доступных
-      const sorted = data.formats
-        .filter((f) => f.mimeType && f.mimeType.includes('video/mp4') && f.url)
-        .sort((a, b) => (parseInt(b.qualityLabel) || 0) - (parseInt(a.qualityLabel) || 0));
-      if (sorted.length > 0) {
-        videoUrl = sorted[0].url;
-      }
-    }
-
-    // Если formats пустые — fallback на adaptiveFormats (только видео, без аудио, но Telegram справляется)
-    if (!videoUrl && data.adaptiveFormats && data.adaptiveFormats.length > 0) {
-      const videoOnly = data.adaptiveFormats
-        .filter((f) => f.mimeType && f.mimeType.includes('video/mp4') && f.url)
-        .sort((a, b) => (parseInt(b.qualityLabel) || 0) - (parseInt(a.qualityLabel) || 0));
-      if (videoOnly.length > 0) {
-        videoUrl = videoOnly[0].url;
-      }
-    }
+    const videoUrl = selectVideoUrl(data);
 
     if (!videoUrl) {
       await bot.sendMessage(chatId, 'НЕ НАШЁЛ НОРМАЛЬНЫЙ ФОРМАТ ДЛЯ СКАЧКИ');
@@ -58,15 +33,12 @@ const handleYoutubeShorts = async (bot, msg) => {
     }
 
     await delay(700);
-    await bot.sendVideo(chatId, videoUrl);
-    await bot.deleteMessage(chatId, msg.message_id);
+    await sendVideo(bot, chatId, videoUrl, 'youtube.mp4');
+    await deleteOriginalMessage(bot, msg);
   } catch (err) {
-    console.error('YouTube Shorts error:', err.message);
-    if (err.response) {
-      console.error('Response status:', err.response.status);
-      console.error('Response data:', JSON.stringify(err.response.data));
-    }
-    await bot.sendMessage(chatId, 'БЛЯДЬ ОШИБИЩА ВЫЛЕЗЛА ПРИ СКАЧКЕ ШОРТСА');
+    console.error('YouTube Shorts error:', { code: err.code, status: err.response?.status });
+    await bot.sendMessage(chatId, err.code === 'VIDEO_TOO_LARGE' ? VIDEO_TOO_LARGE_MESSAGE :
+      'БЛЯДЬ ОШИБИЩА ВЫЛЕЗЛА ПРИ СКАЧКЕ ШОРТСА');
   }
 };
 
@@ -87,4 +59,15 @@ function extractYoutubeId(url) {
   return url; // fallback — вернём как есть
 }
 
-module.exports = { handleYoutubeShorts };
+function selectVideoUrl(data) {
+  // Prefer formats with audio, then preserve the existing video-only fallback.
+  for (const formats of [data.formats, data.adaptiveFormats]) {
+    if (!Array.isArray(formats)) continue;
+    const candidates = formats.filter((format) => format.mimeType?.includes('video/mp4') && format.url);
+    candidates.sort((a, b) => (parseInt(b.qualityLabel, 10) || 0) - (parseInt(a.qualityLabel, 10) || 0));
+    if (candidates.length) return candidates[0].url;
+  }
+  return null;
+}
+
+module.exports = { handleYoutubeShorts, selectVideoUrl, extractYoutubeId };
