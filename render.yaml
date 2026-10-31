@@ -2,7 +2,7 @@ services:
   - type: worker         # worker — фоновый процесс без HTTP, идеально для Telegram-бота
     name: telegram-bot
     runtime: node
-    buildCommand: npm ci
+    buildCommand: npm install
     startCommand: npm start
     envVars:
       - key: TELEGRAM_API
@@ -10,4 +10,6 @@ services:
       - key: RAPID_API_KEY
         sync: false
       - key: RAPID_API_HOST
+        sync: false
+      - key: APIFY_API_TOKEN
         sync: false

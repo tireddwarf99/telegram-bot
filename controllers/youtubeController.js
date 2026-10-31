@@ -1,29 +1,31 @@
-const { sendShortsWithYtDlp } = require('../utils/youtubeFallback');
-const { VIDEO_TOO_LARGE_MESSAGE } = require('../utils/sendVideo');
+const { downloadShorts } = require('../services/apifyShortsService');
+const { sendVideo, VIDEO_TOO_LARGE_MESSAGE } = require('../utils/sendVideo');
 const { deleteOriginalMessage } = require('../utils/media');
+
+function extractYoutubeId(text) {
+  const m = String(text || '').match(/(?:youtube\.com\/shorts\/|youtu\.be\/|[?&]v=)([A-Za-z0-9_-]{11})/);
+  return m ? m[1] : null;
+}
 
 async function handleYoutubeShorts(bot, msg) {
   const chatId = msg.chat.id;
   try {
-    const videoId = extractYoutubeId(msg.text || '');
-    if (!/^[a-zA-Z0-9_-]{11}$/.test(videoId)) {
+    const id = extractYoutubeId(msg.text);
+    if (!id) {
       await bot.sendMessage(chatId, 'НЕВЕРНАЯ ССЫЛКА НА YOUTUBE');
       return;
     }
-    await sendShortsWithYtDlp(bot, chatId, videoId);
+    const url = await downloadShorts(id);
+    await sendVideo(bot, chatId, url, 'youtube.mp4');
     await deleteOriginalMessage(bot, msg);
-  } catch (err) {
-    console.error('YouTube Shorts error:', {
-      code: err.code, stage: err.stage, message: err.message,
+  } catch (error) {
+    console.error('[YouTube] Apify error', {
+      stage: error.stage, code: error.code, status: error.response?.status,
+      message: error.message
     });
-    await bot.sendMessage(chatId, err.code === 'VIDEO_TOO_LARGE'
+    await bot.sendMessage(chatId, error.code === 'VIDEO_TOO_LARGE'
       ? VIDEO_TOO_LARGE_MESSAGE : 'БЛЯДЬ ОШИБИЩА ВЫЛЕЗЛА ПРИ СКАЧКЕ ШОРТСА');
   }
-}
-
-function extractYoutubeId(text) {
-  const match = text.match(/(?:youtube\.com\/shorts\/|youtu\.be\/|[?&]v=)([a-zA-Z0-9_-]{11})(?![a-zA-Z0-9_-])/);
-  return match?.[1] || null;
 }
 
 module.exports = { handleYoutubeShorts, extractYoutubeId };
