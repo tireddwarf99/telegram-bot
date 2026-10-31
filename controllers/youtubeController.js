@@ -1,10 +1,10 @@
-const { downloadShorts } = require('../services/apifyShortsService');
+const { downloadShorts } = require('../services/socialkitShortsService');
 const { sendVideo, VIDEO_TOO_LARGE_MESSAGE } = require('../utils/sendVideo');
 const { deleteOriginalMessage } = require('../utils/media');
 
 function extractYoutubeId(text) {
-  const m = String(text || '').match(/(?:youtube\.com\/shorts\/|youtu\.be\/|[?&]v=)([A-Za-z0-9_-]{11})/);
-  return m ? m[1] : null;
+  const match = String(text || '').match(/(?:youtube\.com\/shorts\/|youtu\.be\/|[?&]v=)([A-Za-z0-9_-]{11})/);
+  return match?.[1] || null;
 }
 
 async function handleYoutubeShorts(bot, msg) {
@@ -19,8 +19,10 @@ async function handleYoutubeShorts(bot, msg) {
     await sendVideo(bot, chatId, url, 'youtube.mp4');
     await deleteOriginalMessage(bot, msg);
   } catch (error) {
-    console.error('[YouTube] Apify error', {
-      stage: error.stage, code: error.code, status: error.response?.status,
+    console.error('[YouTube] SocialKit error', {
+      stage: error.stage,
+      code: error.code,
+      status: error.response?.status,
       message: error.message
     });
     await bot.sendMessage(chatId, error.code === 'VIDEO_TOO_LARGE'

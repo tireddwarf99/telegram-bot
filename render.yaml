@@ -11,5 +11,5 @@ services:
         sync: false
       - key: RAPID_API_HOST
         sync: false
-      - key: APIFY_API_TOKEN
+      - key: SOCIALKIT_ACCESS_KEY
         sync: false
