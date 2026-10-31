@@ -8,7 +8,7 @@ const handleYoutubeShorts = async (bot, msg) => {
   const chatId = msg.chat.id;
 
   try {
-    const response = await axios.get('https://yt-api.p.rapidapi.com/dl', {
+    const fetchShortsData = () => axios.get('https://yt-api.p.rapidapi.com/dl', {
       params: { id: extractYoutubeId(text) },
       headers: {
         'X-RapidAPI-Key': process.env.RAPID_API_KEY_YOUTUBE,
@@ -17,6 +17,7 @@ const handleYoutubeShorts = async (bot, msg) => {
       timeout: 20000,
     });
 
+    const response = await fetchShortsData();
     const data = response.data;
     console.log('YT API status:', data.status);
 
@@ -33,10 +34,27 @@ const handleYoutubeShorts = async (bot, msg) => {
     }
 
     await delay(700);
-    await sendVideo(bot, chatId, videoUrl, 'youtube.mp4');
+    try {
+      await sendVideo(bot, chatId, videoUrl, 'youtube.mp4');
+    } catch (error) {
+      // Signed YouTube CDN links can expire or be restricted to the API's IP.
+      // Refresh once only when the actual download was denied, not on Telegram errors.
+      if (error.stage !== 'video_download' || error.response?.status !== 403) throw error;
+      console.warn('[YouTube] CDN returned 403; requesting a fresh video URL');
+      const refreshed = (await fetchShortsData()).data;
+      if (refreshed.status !== 'OK') throw error;
+      const freshUrl = selectVideoUrl(refreshed);
+      if (!freshUrl || freshUrl === videoUrl) throw error;
+      await sendVideo(bot, chatId, freshUrl, 'youtube.mp4');
+    }
     await deleteOriginalMessage(bot, msg);
   } catch (err) {
-    console.error('YouTube Shorts error:', { code: err.code, status: err.response?.status });
+    let downloadHost;
+    try { downloadHost = err.config?.url ? new URL(err.config.url).hostname : undefined; } catch {}
+    console.error('YouTube Shorts error:', {
+      code: err.code, stage: err.stage, status: err.response?.status,
+      downloadHost, message: err.message,
+    });
     await bot.sendMessage(chatId, err.code === 'VIDEO_TOO_LARGE' ? VIDEO_TOO_LARGE_MESSAGE :
       'БЛЯДЬ ОШИБИЩА ВЫЛЕЗЛА ПРИ СКАЧКЕ ШОРТСА');
   }
