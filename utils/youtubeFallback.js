@@ -3,7 +3,7 @@ const os = require('node:os');
 const path = require('node:path');
 const { execFile } = require('node:child_process');
 const { promisify } = require('node:util');
-const { sendVideo, MAX_VIDEO_BYTES } = require('./sendVideo');
+const { MAX_VIDEO_BYTES } = require('./sendVideo');
 
 const run = promisify(execFile);
 const binary = process.env.YT_DLP_PATH || path.join(__dirname, '..', 'bin', 'yt-dlp');
@@ -13,7 +13,7 @@ async function sendShortsWithYtDlp(bot, chatId, videoId) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'shorts-'));
   const videoPath = path.join(dir, 'shorts.mp4');
   try {
-    console.info('[YouTube] Trying yt-dlp fallback');
+    console.info('[YouTube] Downloading with yt-dlp');
     try {
       await run(binary, [
         '--no-playlist', '--no-config', '--no-progress',
@@ -41,7 +41,13 @@ async function sendShortsWithYtDlp(bot, chatId, videoId) {
       throw error;
     }
     console.info('[YouTube] yt-dlp downloaded MP4', { bytes: size });
-    return await sendVideo(bot, chatId, videoPath, 'youtube.mp4');
+    try {
+      await bot.sendChatAction(chatId, 'upload_video').catch(() => {});
+      return await bot.sendVideo(chatId, videoPath, {}, { filename: 'youtube.mp4', contentType: 'video/mp4' });
+    } catch (error) {
+      error.stage = 'telegram_upload';
+      throw error;
+    }
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
