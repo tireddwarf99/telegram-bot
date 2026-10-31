@@ -5,7 +5,8 @@
   "scripts": {
     "start": "node index.js",
     "test": "node index_test.js",
-    "test:unit": "node --test tests/*.test.js"
+    "test:unit": "node --test tests/*.test.js",
+    "postinstall": "node scripts/install-yt-dlp.js"
   },
   "engines": {
     "node": ">=18.17.0"
