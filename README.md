@@ -143,4 +143,6 @@ npm test
 If you set `PORT`, it applies to both entry points. Use different ports when
 running the main and live test bots at the same time.
 
-## SocialKit Shorts\n\nSet `SOCIALKIT_ACCESS_KEY` in Render. Shorts use `POST https://api.socialkit.dev/youtube/download` with MP4 at 1080p. The API's synchronous download endpoint limits files to 10MB. If a video is larger, the API may reject it; consider the Async Download API v2.\n
+## SocialKit Shorts
+
+Set `SOCIALKIT_ACCESS_KEY` in Render. The bot calls `POST /v2/youtube/download` with MP4 and `1080p`, then polls `GET /v2/downloads/{jobId}` every three seconds until the job is ready or fails. Once ready, the temporary video URL is sent to Telegram. `max_duration: 180` prevents accidental expensive long-video jobs. SocialKit v2 supports large files, but the bot's Telegram upload limit is 50 MiB. The API key for Instagram is unchanged.
