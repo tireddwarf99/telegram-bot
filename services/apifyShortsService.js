@@ -52,6 +52,14 @@ async function downloadShorts(id) {
     );
   } catch (error) {
     error.stage = 'apify_run';
+    const details = error.response?.data?.error;
+    const message = typeof details?.message === 'string' ? details.message : '';
+    // Do not log request config, Authorization headers, or the full Axios error.
+    console.error('[Apify] Actor request rejected', {
+      status: error.response?.status,
+      type: typeof details?.type === 'string' ? details.type.slice(0, 100) : undefined,
+      detail: message.replaceAll(token, '[REDACTED]').slice(0, 300) || undefined,
+    });
     throw error;
   }
   const url = findVideoUrl(response.data);
