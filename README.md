@@ -22,7 +22,7 @@ currently in Russian, and some contain profanity.
 - **Node.js HTTP server** — provides the `/health` endpoint.
 - **Node.js test runner** — automated tests.
 
-Instagram and YouTube downloads use APIs on RapidAPI. TikTok uses TikWM,
+Instagram downloads use RapidAPI. YouTube Shorts use yt-dlp installed during the Render build. TikTok uses TikWM,
 with [fxTikTok](https://github.com/okdargy/fxTikTok) as a fallback.
 
 ## Run locally
@@ -79,10 +79,6 @@ TELEGRAM_API=your_main_telegram_bot_token
 # Instagram: enable access to Instagram Looter2 on RapidAPI.
 RAPID_API_KEY=your_rapidapi_key
 RAPID_API_HOST=instagram-looter2.p.rapidapi.com
-
-# YouTube: enable access to the API at this RapidAPI host.
-RAPID_API_KEY_YOUTUBE=your_rapidapi_key
-RAPID_API_HOST_YOUTUBE=yt-api.p.rapidapi.com
 
 # Optional: separate bot for live testing.
 TELEGRAM_API_TEST=your_test_telegram_bot_token
