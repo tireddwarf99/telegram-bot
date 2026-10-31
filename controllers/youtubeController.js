@@ -1,5 +1,6 @@
 const axios = require('axios');
 const delay = require('../utils/delay');
+const { sendShortsWithYtDlp } = require('../utils/youtubeFallback');
 const { sendVideo, VIDEO_TOO_LARGE_MESSAGE } = require('../utils/sendVideo');
 const { deleteOriginalMessage } = require('../utils/media');
 
@@ -44,8 +45,16 @@ const handleYoutubeShorts = async (bot, msg) => {
       const refreshed = (await fetchShortsData()).data;
       if (refreshed.status !== 'OK') throw error;
       const freshUrl = selectVideoUrl(refreshed);
-      if (!freshUrl || freshUrl === videoUrl) throw error;
-      await sendVideo(bot, chatId, freshUrl, 'youtube.mp4');
+      if (!freshUrl || freshUrl === videoUrl) {
+        await sendShortsWithYtDlp(bot, chatId, extractYoutubeId(text));
+      } else {
+        try {
+          await sendVideo(bot, chatId, freshUrl, 'youtube.mp4');
+        } catch (retryError) {
+          if (retryError.stage !== 'video_download' || retryError.response?.status !== 403) throw retryError;
+          await sendShortsWithYtDlp(bot, chatId, extractYoutubeId(text));
+        }
+      }
     }
     await deleteOriginalMessage(bot, msg);
   } catch (err) {
