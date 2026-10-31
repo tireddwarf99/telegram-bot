@@ -2,7 +2,7 @@ services:
   - type: worker         # worker — фоновый процесс без HTTP, идеально для Telegram-бота
     name: telegram-bot
     runtime: node
-    buildCommand: npm install
+    buildCommand: npm ci && mkdir -p bin && curl -fL --retry 3 https://github.com/yt-dlp/yt-dlp/releases/latest/download/yt-dlp_linux -o bin/yt-dlp && chmod +x bin/yt-dlp
     startCommand: npm start
     envVars:
       - key: TELEGRAM_API
