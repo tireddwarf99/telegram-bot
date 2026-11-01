@@ -19,7 +19,7 @@ function markStage(error, stage) {
 async function downloadFallbackVideo(initialUrl) {
   let url = initialUrl;
   for (let redirects = 0; redirects <= 4; redirects += 1) {
-    if (!isMediaUrl(url)) throw new Error('Unexpected fxTikTok video host');
+    if (!isMediaUrl(url)) throw markStage(new Error('Unexpected fxTikTok video host'), 'fx_download');
     let response;
     try {
       response = await axios.get(url.href, {
@@ -74,7 +74,7 @@ async function getFxTikTokMedia(videoUrl) {
   const url = new URL(videoUrl);
   if (!(url.hostname === 'tiktok.com' || url.hostname.endsWith('.tiktok.com')) ||
       !/^\/@[^/]+\/(video|photo)\/\d+\/?$/.test(url.pathname)) {
-    throw new Error('A full TikTok post URL is required for the fallback');
+    throw markStage(new Error('A full TikTok post URL is required for the fallback'), 'fx_validate_url');
   }
   // Use the post path only, without TikTok's tracking parameters.
   const embedUrl = new URL(url.pathname, 'https://tnktok.com').href;
@@ -94,7 +94,12 @@ async function getFxTikTokMedia(videoUrl) {
   const $ = cheerio.load(html);
   const mediaLink = $('meta[property="og:video"]').attr('content');
   if (!mediaLink) throw markStage(new Error('fxTikTok returned no video'), 'fx_parse_page');
-  const mediaUrl = new URL(mediaLink);
+  let mediaUrl;
+  try {
+    mediaUrl = new URL(mediaLink);
+  } catch (error) {
+    throw markStage(error, 'fx_parse_page');
+  }
   if (!isMediaUrl(mediaUrl)) {
     const host = mediaUrl.hostname.replace(/[^a-z0-9.-]/gi, '').slice(0, 120);
     throw markStage(new Error(`Unexpected fxTikTok video host: ${host}`), 'fx_parse_page');
