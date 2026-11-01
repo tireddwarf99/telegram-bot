@@ -13,18 +13,16 @@ function parseSupportedUrl(value) {
   }
 }
 
-function isTikTokPostUrl(url) {
-  const pathname = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
-  const parts = pathname.split('/');
-  return isTikTokHost(url.hostname) && parts.length === 4 &&
-    parts[1].startsWith('@') && parts[1].length > 1 &&
-    ['video', 'photo'].includes(parts[2]) && /^\d+$/.test(parts[3]);
-}
-
-function isTikTokShortUrl(url) {
-  return isShortHost(url.hostname) ||
-    ['vm.tiktok.com', 'vt.tiktok.com'].includes(url.hostname) ||
-    (isTikTokHost(url.hostname) && /^\/t\//.test(url.pathname));
+function getTikTokPostPath(url) {
+  if (!isTikTokHost(url.hostname)) return null;
+  const parts = url.pathname.split('/').filter(Boolean);
+  const authorIndex = parts.findIndex((part) => part.startsWith('@') && part.length > 1);
+  if (authorIndex < 0) return null;
+  const author = parts[authorIndex];
+  const type = parts[authorIndex + 1];
+  const id = parts[authorIndex + 2];
+  if (!['video', 'photo'].includes(type) || !id || !/^\d+$/.test(id)) return null;
+  return `/${author}/${type}/${id}`;
 }
 
 function extractTikTokUrl(text) {
@@ -40,23 +38,24 @@ async function resolveTikTokUrl(value) {
   let url = parseSupportedUrl(value);
   if (!url) throw new Error('Unsupported TikTok URL');
 
-  // Canonical post URLs need no network lookup. Resolve only known short-link forms.
-  if (isTikTokPostUrl(url) || !isTikTokShortUrl(url)) return url.href;
+  // Canonical post URLs need no network lookup.
+  if (getTikTokPostPath(url)) return url.href;
 
+  // Expand short and mobile TikTok URLs so downstream downloaders receive a post URL.
   for (let redirects = 0; redirects < 5; redirects += 1) {
+    if (!isShortHost(url.hostname) && !isTikTokHost(url.hostname)) return url.href;
     const response = await axios.get(url.href, {
       maxRedirects: 0,
       timeout: 10000,
       maxContentLength: 1024 * 1024,
       headers: { 'User-Agent': 'Mozilla/5.0' },
-      validateStatus: (status) => status >= 300 && status < 400,
+      validateStatus: (status) => status >= 200 && status < 400,
     });
     const location = response.headers.location;
-    if (!location) throw new Error('TikTok short link did not return a redirect');
+    if (!location) return url.href;
     url = parseSupportedUrl(new URL(location, url).href);
     if (!url) throw new Error('TikTok short link redirected to an unsupported host');
-    if (isTikTokPostUrl(url)) return url.href;
-    if (!isTikTokShortUrl(url)) throw new Error('TikTok short link did not resolve to a post URL');
+    if (getTikTokPostPath(url)) return url.href;
   }
   throw new Error('Too many TikTok short-link redirects');
 }
