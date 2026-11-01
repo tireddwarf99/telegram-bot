@@ -70,14 +70,49 @@ async function getTikTokMedia(videoUrl) {
   return getFxTikTokMedia(videoUrl);
 }
 
+function isShortCode(value) {
+  return typeof value === 'string' && value.length >= 4 && value.length <= 100 &&
+    [...value].every((char) => /[A-Za-z0-9_-]/.test(char));
+}
+
+function getFxTikTokPath(url) {
+  const isTikTokHost = url.hostname === 'tiktok.com' || url.hostname.endsWith('.tiktok.com');
+  if (!isTikTokHost) return null;
+  const parts = url.pathname.split('/').filter(Boolean);
+
+  const authorIndex = parts.findIndex((part) => part.startsWith('@') && part.length > 1);
+  if (authorIndex >= 0) {
+    const type = parts[authorIndex + 1];
+    const id = parts[authorIndex + 2];
+    const numericId = Boolean(id) && [...id].every((char) => char >= '0' && char <= '9');
+    if (['video', 'photo'].includes(type) && numericId) {
+      return `/${parts[authorIndex]}/${type}/${id}`;
+    }
+  }
+
+  // fxTikTok supports its own /t/:videoId and /:videoId routes. Map TikTok
+  // short links to those routes without making a blocked request to TikTok.
+  if (parts[0] === 't' && isShortCode(parts[1])) return `/t/${parts[1]}`;
+  if (['vm.tiktok.com', 'vt.tiktok.com'].includes(url.hostname) &&
+      parts.length === 1 && isShortCode(parts[0])) {
+    return `/${parts[0]}`;
+  }
+  if (url.hostname === 'm.tiktok.com' && parts[0] === 'v' && isShortCode(parts[1])) {
+    return `/${parts[1]}`;
+  }
+  return null;
+}
+
 async function getFxTikTokMedia(videoUrl) {
   const url = new URL(videoUrl);
-  if (!(url.hostname === 'tiktok.com' || url.hostname.endsWith('.tiktok.com')) ||
-      !/^\/@[^/]+\/(video|photo)\/\d+\/?$/.test(url.pathname)) {
-    throw markStage(new Error('A full TikTok post URL is required for the fallback'), 'fx_validate_url');
+  const fxPath = getFxTikTokPath(url);
+  if (!fxPath) {
+    const safeHost = url.hostname.replace(/[^a-z0-9.-]/gi, '').slice(0, 120);
+    const safePath = url.pathname.replace(/[^a-z0-9@._/-]/gi, '').slice(0, 160);
+    throw markStage(new Error(`Unsupported TikTok post or short link (${safeHost}${safePath})`), 'fx_validate_url');
   }
-  // Use the post path only, without TikTok's tracking parameters.
-  const embedUrl = new URL(url.pathname, 'https://tnktok.com').href;
+
+  const embedUrl = new URL(fxPath, 'https://tnktok.com').href;
   let html;
   try {
     ({ data: html } = await axios.get(embedUrl, {
