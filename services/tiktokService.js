@@ -3,10 +3,12 @@ const cheerio = require('cheerio');
 const { MAX_VIDEO_BYTES } = require('../utils/sendVideo');
 
 function isMediaUrl(url) {
-  const domains = ['tiktokcdn-us.com', 'tiktokcdn.com', 'tiktokv.com'];
+  const domains = ['tiktokcdn-us.com', 'tiktokcdn-eu.com', 'tiktokcdn.com', 'tiktokv.com'];
+  const fxTikTokHost = url.hostname === 'tnktok.com' || url.hostname.endsWith('.tnktok.com');
+  const tiktokMediaHost = domains.some((domain) =>
+    url.hostname === domain || url.hostname.endsWith(`.${domain}`));
   return url.protocol === 'https:' && !url.username && !url.password && !url.port &&
-    (url.hostname === 'offload.tnktok.com' || domains.some((domain) =>
-      url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
+    (fxTikTokHost || tiktokMediaHost);
 }
 
 function markStage(error, stage) {
@@ -116,9 +118,9 @@ async function getFxTikTokMedia(videoUrl) {
     throw markStage(new Error('fxTikTok returned no video'), 'fx_parse_page');
   }
   const mediaUrl = new URL(mediaLink);
-  if (mediaUrl.protocol !== 'https:' || mediaUrl.hostname !== 'offload.tnktok.com' ||
-      mediaUrl.username || mediaUrl.password || mediaUrl.port) {
-    throw markStage(new Error('Unexpected fxTikTok video host'), 'fx_parse_page');
+  if (!isMediaUrl(mediaUrl)) {
+    const host = mediaUrl.hostname.replace(/[^a-z0-9.-]/gi, '').slice(0, 120);
+    throw markStage(new Error(`Unexpected fxTikTok video host: ${host}`), 'fx_parse_page');
   }
 
   const video = await downloadFallbackVideo(mediaUrl);
