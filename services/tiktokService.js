@@ -85,12 +85,15 @@ async function getTikTokMedia(videoUrl) {
 
 async function getFxTikTokMedia(videoUrl) {
   const url = new URL(videoUrl);
+  const postPath = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
+  const pathParts = postPath.split('/');
   if (!(url.hostname === 'tiktok.com' || url.hostname.endsWith('.tiktok.com')) ||
-      !/^\\/@[^/]+\\/(video|photo)\\/\\d+\\/?$/.test(url.pathname)) {
+      pathParts.length !== 4 || !pathParts[1].startsWith('@') || pathParts[1].length < 2 ||
+      !['video', 'photo'].includes(pathParts[2]) || !/^\\d+$/.test(pathParts[3])) {
     throw markStage(new Error('A full TikTok post URL is required for the fallback'), 'fx_validate_url');
   }
   // Use the post path only, without TikTok's tracking parameters.
-  const embedUrl = new URL(url.pathname, 'https://tnktok.com').href;
+  const embedUrl = new URL(postPath, 'https://tnktok.com').href;
   let html;
   try {
     ({ data: html } = await axios.get(embedUrl, {
