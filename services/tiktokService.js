@@ -3,10 +3,17 @@ const cheerio = require('cheerio');
 const { MAX_VIDEO_BYTES } = require('../utils/sendVideo');
 
 function isMediaUrl(url) {
-  const domains = ['tiktokcdn-us.com', 'tiktokcdn.com', 'tiktokv.com'];
+  const domains = ['tiktokcdn-us.com', 'tiktokcdn-eu.com', 'tiktokcdn.com', 'tiktokv.com'];
+  const fxTikTokHost = url.hostname === 'tnktok.com' || url.hostname.endsWith('.tnktok.com');
+  const tiktokCdnHost = domains.some((domain) =>
+    url.hostname === domain || url.hostname.endsWith(`.${domain}`));
   return url.protocol === 'https:' && !url.username && !url.password && !url.port &&
-    (url.hostname === 'offload.tnktok.com' || domains.some((domain) =>
-      url.hostname === domain || url.hostname.endsWith(`.${domain}`)));
+    (fxTikTokHost || tiktokCdnHost);
+}
+
+function markStage(error, stage) {
+  if (error && typeof error === 'object' && !error.stage) error.stage = stage;
+  return error;
 }
 
 async function downloadFallbackVideo(initialUrl) {
@@ -26,20 +33,20 @@ async function downloadFallbackVideo(initialUrl) {
       if (error.code === 'ERR_BAD_RESPONSE' && /maxContentLength/i.test(error.message)) {
         error.code = 'VIDEO_TOO_LARGE';
       }
-      throw error;
+      throw markStage(error, 'fx_download');
     }
     if (response.status >= 300) {
-      if (!response.headers.location) throw new Error('Missing video redirect');
+      if (!response.headers.location) throw markStage(new Error('Missing video redirect'), 'fx_download');
       url = new URL(response.headers.location, url);
       continue;
     }
     const video = Buffer.from(response.data);
     if (video.length < 12 || video.toString('ascii', 4, 8) !== 'ftyp') {
-      throw new Error('fxTikTok did not return an MP4 file');
+      throw markStage(new Error('fxTikTok did not return an MP4 file'), 'fx_download');
     }
     return video;
   }
-  throw new Error('Too many video redirects');
+  throw markStage(new Error('Too many video redirects'), 'fx_download');
 }
 
 async function getTikTokMedia(videoUrl) {
@@ -71,18 +78,26 @@ async function getFxTikTokMedia(videoUrl) {
   }
   // Use the post path only, without TikTok's tracking parameters.
   const embedUrl = new URL(url.pathname, 'https://tnktok.com').href;
-  const { data: html } = await axios.get(embedUrl, {
-    timeout: 20000,
-    maxContentLength: 2 * 1024 * 1024,
-    headers: { 'User-Agent': 'TelegramBot (like TwitterBot)' },
-  });
+  let html;
+  try {
+    ({ data: html } = await axios.get(embedUrl, {
+      timeout: 20000,
+      maxContentLength: 2 * 1024 * 1024,
+      headers: {
+        'User-Agent': 'TelegramBot (like TwitterBot)',
+        Accept: 'text/html,application/xhtml+xml',
+      },
+    }));
+  } catch (error) {
+    throw markStage(error, 'fx_page');
+  }
   const $ = cheerio.load(html);
   const mediaLink = $('meta[property="og:video"]').attr('content');
-  if (!mediaLink) throw new Error('fxTikTok returned no video');
+  if (!mediaLink) throw markStage(new Error('fxTikTok returned no video'), 'fx_parse_page');
   const mediaUrl = new URL(mediaLink);
-  if (mediaUrl.protocol !== 'https:' || mediaUrl.hostname !== 'offload.tnktok.com' ||
-      mediaUrl.username || mediaUrl.password || mediaUrl.port) {
-    throw new Error('Unexpected fxTikTok video host');
+  if (!isMediaUrl(mediaUrl)) {
+    const host = mediaUrl.hostname.replace(/[^a-z0-9.-]/gi, '').slice(0, 120);
+    throw markStage(new Error(`Unexpected fxTikTok video host: ${host}`), 'fx_parse_page');
   }
 
   const video = await downloadFallbackVideo(mediaUrl);
