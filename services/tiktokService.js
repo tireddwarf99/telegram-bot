@@ -85,14 +85,16 @@ async function getTikTokMedia(videoUrl) {
 
 async function getFxTikTokMedia(videoUrl) {
   const url = new URL(videoUrl);
-  const postPath = url.pathname.endsWith('/') ? url.pathname.slice(0, -1) : url.pathname;
-  const pathParts = postPath.split('/');
+  const pathParts = url.pathname.split('/').filter(Boolean);
+  const authorIndex = pathParts.findIndex((part) => part.startsWith('@') && part.length > 1);
+  const postType = authorIndex >= 0 ? pathParts[authorIndex + 1] : null;
+  const postId = authorIndex >= 0 ? pathParts[authorIndex + 2] : null;
   if (!(url.hostname === 'tiktok.com' || url.hostname.endsWith('.tiktok.com')) ||
-      pathParts.length !== 4 || !pathParts[1].startsWith('@') || pathParts[1].length < 2 ||
-      !['video', 'photo'].includes(pathParts[2]) || !/^\\d+$/.test(pathParts[3])) {
-    throw markStage(new Error('A full TikTok post URL is required for the fallback'), 'fx_validate_url');
+      authorIndex < 0 || !['video', 'photo'].includes(postType) || !postId || !/^\\d+$/.test(postId)) {
+    throw markStage(new Error(`TikTok URL is not a canonical post link (${url.hostname}${url.pathname.slice(0, 160)})`), 'fx_validate_url');
   }
-  // Use the post path only, without TikTok's tracking parameters.
+  // Use only the canonical post path, without tracking or extra path segments.
+  const postPath = `/${pathParts[authorIndex]}/${postType}/${postId}`;
   const embedUrl = new URL(postPath, 'https://tnktok.com').href;
   let html;
   try {
