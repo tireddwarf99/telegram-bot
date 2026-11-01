@@ -15,7 +15,7 @@ currently in Russian, and some contain profanity.
 ## Technology stack
 
 - **JavaScript and Node.js** — application runtime.
-- **node-telegram-bot-api** — Telegram integration using long polling.
+- **node-telegram-bot-api** — Telegram webhooks on Render and long polling locally.
 - **Axios** — requests to media services.
 - **Cheerio** — extracts video links from HTML for the TikTok fallback.
 - **dotenv** — loads local environment variables from `.env`.
