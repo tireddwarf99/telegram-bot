@@ -4,6 +4,11 @@ const { getTikTokMedia, getFxTikTokMedia } = require('../services/tiktokService'
 const { sendVideo, VIDEO_TOO_LARGE_MESSAGE } = require('../utils/sendVideo');
 const { sendPhotoAlbum, deleteOriginalMessage } = require('../utils/media');
 
+function safeErrorText(value) {
+  if (typeof value !== 'string') return undefined;
+  return value.replace(/https?:\/\/\S+/gi, '[URL]').replace(/\s+/g, ' ').slice(0, 250);
+}
+
 const handleTikTok = async (bot, msg) => {
   const text = msg.text;
   const chatId = msg.chat.id;
@@ -22,7 +27,6 @@ const handleTikTok = async (bot, msg) => {
       try {
         await sendVideo(bot, chatId, media.play, 'tiktok.mp4');
       } catch (error) {
-        // Different sources can provide different encodings of the same post.
         if (error.code !== 'VIDEO_TOO_LARGE' || Buffer.isBuffer(media.play)) throw error;
         console.warn('[TikTok] TikWM video exceeds upload limit; trying fxTikTok', {
           bytes: error.videoBytes, limitBytes: error.limitBytes, sizeSource: error.sizeSource,
@@ -38,15 +42,19 @@ const handleTikTok = async (bot, msg) => {
 
     await deleteOriginalMessage(bot, msg);
   } catch (err) {
-    const description = err.response?.body?.description;
+    const responseData = err.response?.data;
+    const responseDescription = responseData && typeof responseData === 'object'
+      ? responseData.description || responseData.message
+      : err.response?.body?.description;
     console.error('[TikTok] Download or delivery failed', {
       stage: err.stage || stage,
       status: err.response?.status ?? err.response?.statusCode ?? err.response?.body?.error_code,
       code: err.code,
+      message: safeErrorText(err.message),
       bytes: err.videoBytes,
       limitBytes: err.limitBytes,
       sizeSource: err.sizeSource,
-      description: typeof description === 'string' ? description.replace(/https?:\/\/\S+/gi, '[URL]').slice(0, 250) : undefined,
+      description: safeErrorText(responseDescription),
     });
     await bot.sendMessage(chatId, err.code === 'VIDEO_TOO_LARGE' ? VIDEO_TOO_LARGE_MESSAGE :
       'поломал теперь чини сам хуесос');
