@@ -90,7 +90,7 @@ async function getFxTikTokMedia(videoUrl) {
   const postType = authorIndex >= 0 ? pathParts[authorIndex + 1] : null;
   const postId = authorIndex >= 0 ? pathParts[authorIndex + 2] : null;
   if (!(url.hostname === 'tiktok.com' || url.hostname.endsWith('.tiktok.com')) ||
-      authorIndex < 0 || !['video', 'photo'].includes(postType) || !postId || !/^\\d+$/.test(postId)) {
+      authorIndex < 0 || !['video', 'photo'].includes(postType) || !postId || !/^[0-9]+$/.test(postId)) {
     throw markStage(new Error(`TikTok URL is not a canonical post link (${url.hostname}${url.pathname.slice(0, 160)})`), 'fx_validate_url');
   }
   // Use only the canonical post path, without tracking or extra path segments.
