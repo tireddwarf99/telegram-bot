@@ -120,11 +120,6 @@ async function downloadAndUpload(bot, chatId, media, fileOptions, notifyIfLarge)
       responseType: 'stream',
       timeout: 60000,
       maxRedirects: 5,
-      headers: {
-        'User-Agent': 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36',
-        Accept: '*/*',
-        'Accept-Encoding': 'identity',
-      },
     });
     if (Number(response.headers['content-length']) > MAX_VIDEO_BYTES) {
       throw tooLargeError(Number(response.headers['content-length']), 'content_length');

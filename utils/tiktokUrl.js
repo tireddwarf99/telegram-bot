@@ -13,18 +13,6 @@ function parseSupportedUrl(value) {
   }
 }
 
-function getTikTokPostPath(url) {
-  if (!isTikTokHost(url.hostname)) return null;
-  const parts = url.pathname.split('/').filter(Boolean);
-  const authorIndex = parts.findIndex((part) => part.startsWith('@') && part.length > 1);
-  if (authorIndex < 0) return null;
-  const author = parts[authorIndex];
-  const type = parts[authorIndex + 1];
-  const id = parts[authorIndex + 2];
-  if (!['video', 'photo'].includes(type) || !id || !/^\d+$/.test(id)) return null;
-  return `/${author}/${type}/${id}`;
-}
-
 function extractTikTokUrl(text) {
   const links = (text || '').match(/https?:\/\/[^\s<>"\[\]]+/gi) || [];
   for (const link of links) {
@@ -38,26 +26,23 @@ async function resolveTikTokUrl(value) {
   let url = parseSupportedUrl(value);
   if (!url) throw new Error('Unsupported TikTok URL');
 
-  // Canonical post URLs need no network lookup.
-  if (getTikTokPostPath(url)) return url.href;
-
-  // Expand short and mobile TikTok URLs so downstream downloaders receive a post URL.
+  // Stop as soon as TikTok is reached: its page may require cookies or reject bots.
   for (let redirects = 0; redirects < 5; redirects += 1) {
-    if (!isShortHost(url.hostname) && !isTikTokHost(url.hostname)) return url.href;
+    if (isTikTokHost(url.hostname)) return url.href;
     const response = await axios.get(url.href, {
       maxRedirects: 0,
       timeout: 10000,
       maxContentLength: 1024 * 1024,
       headers: { 'User-Agent': 'Mozilla/5.0' },
-      validateStatus: (status) => status >= 200 && status < 400,
+      validateStatus: (status) => status >= 300 && status < 400,
     });
     const location = response.headers.location;
-    if (!location) return url.href;
+    if (!location) throw new Error('tt.site did not return a redirect');
     url = parseSupportedUrl(new URL(location, url).href);
-    if (!url) throw new Error('TikTok short link redirected to an unsupported host');
-    if (getTikTokPostPath(url)) return url.href;
+    if (!url) throw new Error('tt.site redirected to an unsupported host');
   }
-  throw new Error('Too many TikTok short-link redirects');
+  if (isTikTokHost(url.hostname)) return url.href;
+  throw new Error('Too many tt.site redirects');
 }
 
 module.exports = { extractTikTokUrl, resolveTikTokUrl };

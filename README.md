@@ -22,7 +22,7 @@ currently in Russian, and some contain profanity.
 - **Node.js HTTP server** — provides the `/health` endpoint.
 - **Node.js test runner** — automated tests.
 
-Instagram downloads use RapidAPI. YouTube Shorts use SocialKit. TikTok uses TikWM,
+Instagram and YouTube downloads use APIs on RapidAPI. TikTok uses TikWM,
 with [fxTikTok](https://github.com/okdargy/fxTikTok) as a fallback.
 
 ## Run locally
@@ -66,7 +66,8 @@ dependencies are installed by `npm ci`, using the versions in `package-lock.json
 | `TELEGRAM_API` | Main bot | Your Telegram bot token from @BotFather. |
 | `RAPID_API_KEY` | Instagram | A RapidAPI key with access to Instagram Looter2. |
 | `RAPID_API_HOST` | Instagram | `instagram-looter2.p.rapidapi.com` |
-| `SOCIALKIT_ACCESS_KEY` | YouTube | SocialKit API token configured in Render. |
+| `RAPID_API_KEY_YOUTUBE` | YouTube | A RapidAPI key with access to the YouTube API at the host below. |
+| `RAPID_API_HOST_YOUTUBE` | YouTube | `yt-api.p.rapidapi.com` |
 | `TELEGRAM_API_TEST` | Optional live test bot | A separate Telegram bot token. |
 | `PORT` | Optional HTTP setting | Health server port; defaults to `3000` for the main bot and `3001` for the test bot. |
 
@@ -79,8 +80,9 @@ TELEGRAM_API=your_main_telegram_bot_token
 RAPID_API_KEY=your_rapidapi_key
 RAPID_API_HOST=instagram-looter2.p.rapidapi.com
 
-# YouTube Shorts via SocialKit
-SOCIALKIT_ACCESS_KEY=your_socialkit_token_here
+# YouTube: enable access to the API at this RapidAPI host.
+RAPID_API_KEY_YOUTUBE=your_rapidapi_key
+RAPID_API_HOST_YOUTUBE=yt-api.p.rapidapi.com
 
 # Optional: separate bot for live testing.
 TELEGRAM_API_TEST=your_test_telegram_bot_token
@@ -108,7 +110,7 @@ restricted posts.
 
 ## Video uploads
 
-Videos from TikWM and Instagram are first sent by URL, without a
+Videos from TikWM, Instagram, and YouTube are first sent by URL, without a
 local download. If Telegram rejects the URL because the video exceeds its
 20 MB URL-fetch limit or Telegram cannot fetch it, the bot downloads it to a
 temporary file and uploads it. The wait message is shown only for videos over 20 MB.
@@ -142,7 +144,3 @@ npm test
 
 If you set `PORT`, it applies to both entry points. Use different ports when
 running the main and live test bots at the same time.
-
-## SocialKit Shorts
-
-Set `SOCIALKIT_ACCESS_KEY` in Render. The bot calls `POST /v2/youtube/download` with MP4 and `1080p`, then polls `GET /v2/downloads/{jobId}` every three seconds until the job is ready or fails. Once ready, the temporary video URL is sent to Telegram. `max_duration: 180` prevents accidental expensive long-video jobs. SocialKit v2 supports large files, but the bot's Telegram upload limit is 50 MiB. The API key for Instagram is unchanged.

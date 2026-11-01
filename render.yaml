@@ -11,5 +11,7 @@ services:
         sync: false
       - key: RAPID_API_HOST
         sync: false
-      - key: SOCIALKIT_ACCESS_KEY
+      - key: RAPID_API_KEY_YOUTUBE
+        sync: false
+      - key: RAPID_API_HOST_YOUTUBE
         sync: false
