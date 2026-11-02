@@ -49,6 +49,46 @@ async function downloadFallbackVideo(initialUrl) {
   throw markStage(new Error('Too many video redirects'), 'fx_download');
 }
 
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+function isImageBuffer(buffer) {
+  return (buffer.length >= 3 && buffer[0] === 0xff && buffer[1] === 0xd8 && buffer[2] === 0xff) ||
+    (buffer.length >= 8 && buffer.subarray(0, 8).equals(Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]))) ||
+    (buffer.length >= 12 && buffer.toString('ascii', 0, 4) === 'RIFF' &&
+      buffer.toString('ascii', 8, 12) === 'WEBP');
+}
+
+async function downloadFallbackImage(initialUrl) {
+  let url = initialUrl;
+  for (let redirects = 0; redirects <= 4; redirects += 1) {
+    if (!isMediaUrl(url)) throw markStage(new Error('Unexpected fxTikTok image host'), 'fx_download');
+    let response;
+    try {
+      response = await axios.get(url.href, {
+        responseType: 'arraybuffer',
+        timeout: 45000,
+        maxContentLength: MAX_IMAGE_BYTES,
+        maxRedirects: 0,
+        validateStatus: (status) => status >= 200 && status < 400,
+      });
+    } catch (error) {
+      throw markStage(error, 'fx_download');
+    }
+    if (response.status >= 300) {
+      if (!response.headers.location) throw markStage(new Error('Missing image redirect'), 'fx_download');
+      url = new URL(response.headers.location, url);
+      continue;
+    }
+    const image = Buffer.from(response.data);
+    if (image.length > MAX_IMAGE_BYTES) {
+      throw markStage(new Error('fxTikTok image exceeds the 10 MB limit'), 'fx_download');
+    }
+    if (!isImageBuffer(image)) throw markStage(new Error('fxTikTok did not return an image file'), 'fx_download');
+    return image;
+  }
+  throw markStage(new Error('Too many image redirects'), 'fx_download');
+}
+
 async function getTikTokMedia(videoUrl) {
   try {
     const { data: json } = await axios.get('https://www.tikwm.com/api/', {
@@ -128,20 +168,42 @@ async function getFxTikTokMedia(videoUrl) {
   }
   const $ = cheerio.load(html);
   const mediaLink = $('meta[property="og:video"]').attr('content');
-  if (!mediaLink) throw markStage(new Error('fxTikTok returned no video'), 'fx_parse_page');
-  let mediaUrl;
-  try {
-    mediaUrl = new URL(mediaLink);
-  } catch (error) {
-    throw markStage(error, 'fx_parse_page');
-  }
-  if (!isMediaUrl(mediaUrl)) {
-    const host = mediaUrl.hostname.replace(/[^a-z0-9.-]/gi, '').slice(0, 120);
-    throw markStage(new Error(`Unexpected fxTikTok video host: ${host}`), 'fx_parse_page');
+  if (mediaLink) {
+    let mediaUrl;
+    try {
+      mediaUrl = new URL(mediaLink);
+    } catch (error) {
+      throw markStage(error, 'fx_parse_page');
+    }
+    if (!isMediaUrl(mediaUrl)) {
+      const host = mediaUrl.hostname.replace(/[^a-z0-9.-]/gi, '').slice(0, 120);
+      throw markStage(new Error(`Unexpected fxTikTok video host: ${host}`), 'fx_parse_page');
+    }
+    const video = await downloadFallbackVideo(mediaUrl);
+    return { play: video };
   }
 
-  const video = await downloadFallbackVideo(mediaUrl);
-  return { play: video };
+  // fxTikTok publishes each photo-mode image as an og:image tag.
+  const imageLinks = [...new Set(
+    $('meta[property="og:image"]').map((_, element) => $(element).attr('content')).get().filter(Boolean)
+  )].slice(0, 10);
+  if (!imageLinks.length) {
+    throw markStage(new Error('fxTikTok returned no video or photos'), 'fx_parse_page');
+  }
+  const images = await Promise.all(imageLinks.map(async (link) => {
+    let imageUrl;
+    try {
+      imageUrl = new URL(link, embedUrl);
+    } catch (error) {
+      throw markStage(error, 'fx_parse_page');
+    }
+    if (!isMediaUrl(imageUrl)) {
+      const host = imageUrl.hostname.replace(/[^a-z0-9.-]/gi, '').slice(0, 120);
+      throw markStage(new Error(`Unexpected fxTikTok image host: ${host}`), 'fx_parse_page');
+    }
+    return downloadFallbackImage(imageUrl);
+  }));
+  return { images };
 }
 
 module.exports = { getTikTokMedia, getFxTikTokMedia };
