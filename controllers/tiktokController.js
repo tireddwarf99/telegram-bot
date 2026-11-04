@@ -58,7 +58,7 @@ const handleTikTok = async (bot, msg) => {
       description: safeErrorText(responseDescription),
     });
     await bot.sendMessage(chatId, err.code === 'VIDEO_TOO_LARGE' ? VIDEO_TOO_LARGE_MESSAGE :
-      isTransient(err) ? 'Сервисы загрузки TikTok временно недоступны. Попробуй отправить ссылку через несколько минут.' :
+      isTransient(err) ? 'тикток с запасным загрузчиком легли нахуй, кинь ссылку через пару минут' :
       'поломал теперь чини сам хуесос');
   }
 };
