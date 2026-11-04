@@ -1,6 +1,7 @@
 const axios = require('axios');
 const cheerio = require('cheerio');
 const { MAX_VIDEO_BYTES } = require('../utils/sendVideo');
+const { retryRequest } = require('../utils/retryRequest');
 
 function isMediaUrl(url) {
   const domains = ['tiktokcdn-us.com', 'tiktokcdn-eu.com', 'tiktokcdn.com', 'tiktokv.com'];
@@ -91,10 +92,10 @@ async function downloadFallbackImage(initialUrl) {
 
 async function getTikTokMedia(videoUrl) {
   try {
-    const { data: json } = await axios.get('https://www.tikwm.com/api/', {
+    const { data: json } = await retryRequest(() => axios.get('https://www.tikwm.com/api/', {
       params: { url: videoUrl },
       timeout: 30000,
-    });
+    }));
     if (json.data && (json.data.play || (Array.isArray(json.data.images) && json.data.images.length))) {
       return json.data;
     }
@@ -155,14 +156,14 @@ async function getFxTikTokMedia(videoUrl) {
   const embedUrl = new URL(fxPath, 'https://tnktok.com').href;
   let html;
   try {
-    ({ data: html } = await axios.get(embedUrl, {
+    ({ data: html } = await retryRequest(() => axios.get(embedUrl, {
       timeout: 20000,
       maxContentLength: 2 * 1024 * 1024,
       headers: {
         'User-Agent': 'TelegramBot (like TwitterBot)',
         Accept: 'text/html,application/xhtml+xml',
       },
-    }));
+    })));
   } catch (error) {
     throw markStage(error, 'fx_page');
   }
@@ -207,3 +208,4 @@ async function getFxTikTokMedia(videoUrl) {
 }
 
 module.exports = { getTikTokMedia, getFxTikTokMedia };
+

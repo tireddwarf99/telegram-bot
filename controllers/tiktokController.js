@@ -3,6 +3,7 @@ const { extractTikTokUrl, resolveTikTokUrl } = require('../utils/tiktokUrl');
 const { getTikTokMedia, getFxTikTokMedia } = require('../services/tiktokService');
 const { sendVideo, VIDEO_TOO_LARGE_MESSAGE } = require('../utils/sendVideo');
 const { sendPhotoAlbum, deleteOriginalMessage } = require('../utils/media');
+const { isTransient } = require('../utils/retryRequest');
 
 function safeErrorText(value) {
   if (typeof value !== 'string') return undefined;
@@ -57,8 +58,10 @@ const handleTikTok = async (bot, msg) => {
       description: safeErrorText(responseDescription),
     });
     await bot.sendMessage(chatId, err.code === 'VIDEO_TOO_LARGE' ? VIDEO_TOO_LARGE_MESSAGE :
+      isTransient(err) ? 'Сервисы загрузки TikTok временно недоступны. Попробуй отправить ссылку через несколько минут.' :
       'поломал теперь чини сам хуесос');
   }
 };
 
 module.exports = { handleTikTok };
+
